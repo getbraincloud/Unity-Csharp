@@ -7,6 +7,7 @@ using System.IO;
 using System.Threading;
 using System;
 using System.Net;
+using System.Text;
 
 namespace BrainCloudTests
 {
@@ -46,7 +47,7 @@ namespace BrainCloudTests
             _bc.Client.RegisterFileUploadCallbacks(FileCallbackSuccess, FileCallbackFail);
 
             FileInfo info = new FileInfo(CreateFile(4024));
-
+            
             _bc.FileService.UploadFile(
                 _cloudPath,
                 info.Name,
@@ -57,13 +58,70 @@ namespace BrainCloudTests
 
             tr.Run();
 
+            WaitForReturn(new[] { GetUploadId(tr.m_response) });
+
+            Assert.IsFalse(_failCount > 0);
+        }
+        
+        [Test]
+        public void TestUploadFromMemory()
+        {
+            TestResult tr = new TestResult(_bc);
             _bc.Client.RegisterFileUploadCallbacks(FileCallbackSuccess, FileCallbackFail);
+
+            string fileName = "testFile.txt";
+            string fileContent = "Hello, I'm a file";
+            byte[] fileData = ConvertByteFromFile(fileContent);
+
+            _bc.FileService.UploadFileFromMemory(
+                _cloudPath,
+                fileName,
+                true,
+                true,
+                fileData,
+                tr.ApiSuccess, tr.ApiError);
+            
+            tr.Run();
 
             WaitForReturn(new[] { GetUploadId(tr.m_response) });
 
             Assert.IsFalse(_failCount > 0);
         }
 
+        [Test]
+        public void TestUploadFromMemoryMultiFiles()
+        {
+            TestResult tr = new TestResult(_bc);
+            _bc.Client.RegisterFileUploadCallbacks(FileCallbackSuccess, FileCallbackFail);
+            
+            string fileName1 = "testFile1.txt";
+            string fileContent1 = "Hello, I'm a file !";
+            byte[] fileData1 = ConvertByteFromFile(fileContent1);
+            _bc.FileService.UploadFileFromMemory(
+                _cloudPath,
+                fileName1,
+                true,
+                true,
+                fileData1,
+                tr.ApiSuccess, tr.ApiError);
+
+            string fileName2 = "testFile2.txt";
+            string fileContent2 = "Hey look ! Another file !";
+            byte[] fileData2 = ConvertByteFromFile(fileContent2);
+            _bc.FileService.UploadFileFromMemory(
+                _cloudPath,
+                fileName2,
+                true,
+                true,
+                fileData2,
+                tr.ApiSuccess, tr.ApiError);
+
+            tr.Run();
+
+            WaitForReturn(new[] { GetUploadId(tr.m_response) });
+
+            Assert.IsFalse(_failCount > 0);
+        }
 
         private string GetFullPath(string cloudPath, string cloudFileName)
         {
@@ -98,8 +156,6 @@ namespace BrainCloudTests
                 tr.ApiSuccess, tr.ApiError);
         
             tr.Run();
-        
-            _bc.Client.RegisterFileUploadCallbacks(FileCallbackSuccess, FileCallbackFail);
 
             WaitForReturn(new[] { GetUploadId(tr.m_response) });
 
@@ -142,8 +198,6 @@ namespace BrainCloudTests
                 tr.ApiSuccess, tr.ApiError);
 
             tr.Run();
-
-            _bc.Client.RegisterFileUploadCallbacks(FileCallbackSuccess, FileCallbackFail);
 
             WaitForReturn(new[] { GetUploadId(tr.m_response) }, 500);
 
@@ -354,7 +408,7 @@ namespace BrainCloudTests
             _bc.FileService.DeleteUserFiles("", true, tr.ApiSuccess, tr.ApiError);
             tr.Run();
         }
-
+        
         /// <summary>
         /// Creates a test file filled with garbage
         /// </summary>
@@ -370,6 +424,21 @@ namespace BrainCloudTests
             }
 
             return path;
+        }
+
+        private byte[] ConvertByteFromFile(string fileContent)
+        {
+            if (Uri.IsWellFormedUriString(fileContent, UriKind.Absolute))
+            {
+                Stream info = new FileStream(fileContent, FileMode.Open);
+                byte[] fileData = new Byte[(int) info.Length];
+                info.Seek(0, SeekOrigin.Begin);
+                info.Read(fileData, 0, (int) info.Length);
+                info.Close();
+                return fileData;
+            }
+
+            return Encoding.ASCII.GetBytes(fileContent);
         }
     }
 }

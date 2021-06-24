@@ -1042,9 +1042,16 @@ using UnityEngine.Experimental.Networking;
                             {
                                 string uploadId = (string)fileData["uploadId"];
                                 string localPath = (string)fileData["localPath"];
+                                string fileName = (string) fileData["cloudFilename"];
                                 var uploader = new FileUploader(uploadId, localPath, UploadURL, SessionID,
                                     _uploadLowTransferRateTimeout, _uploadLowTransferRateThreshold, _clientRef, peerCode);
-#if DOT_NET
+                                
+                                uploader.FileName = fileName;
+                                if (_clientRef.FileService.FileStorage.ContainsKey(localPath))
+                                {
+                                    uploader.TotalBytesToTransfer = _clientRef.FileService.FileStorage[localPath].Length;    
+                                }
+#if DOT_NET                     
                                 uploader.HttpClient = _httpClient;
 #endif
                                 _fileUploads.Add(uploader);

@@ -15,7 +15,8 @@ using System;
     public class BrainCloudFile
     {
         private BrainCloudClient _client;
-
+        public Dictionary<string, byte[]> FileStorage = new Dictionary<string, byte[]>();
+        
         public BrainCloudFile(BrainCloudClient client)
         {
             _client = client;
@@ -34,6 +35,7 @@ using System;
         /// <param name="success">The success callback</param>
         /// <param name="failure">The failure callback</param>
         /// <param name="cbObject">The callback object</param>
+        [Obsolete("This has been deprecated use UploadFileFromMemory instead - removal after June 22nd 2022")]
         public bool UploadFile(
             string cloudPath,
             string cloudFilename,
@@ -47,34 +49,26 @@ using System;
 #if UNITY_WEBPLAYER || UNITY_WEBGL
             throw new Exception("FileUpload API is not supported on Web builds use FileUploadFromMemory instead");
 #else
-            FileInfo info = new FileInfo(localPath);
+            Stream info = new FileStream(localPath,FileMode.Open);
 
-            if (!info.Exists)
+            if (info.Length == 0)
             {
                 _client.Log("File at " + localPath + " does not exist");
                 return false;
             }
+            byte[] fileData = new Byte[(int)info.Length];
+            info.Seek(0, SeekOrigin.Begin);
+            info.Read(fileData, 0, (int)info.Length);
+            info.Close();
 
-            Dictionary<string, object> data = new Dictionary<string, object>();
-            data[OperationParam.UploadLocalPath.Value] = localPath;
-            data[OperationParam.UploadCloudFilename.Value] = cloudFilename;
-            data[OperationParam.UploadCloudPath.Value] = cloudPath;
-            data[OperationParam.UploadShareable.Value] = shareable;
-            data[OperationParam.UploadReplaceIfExists.Value] = replaceIfExists;
-            data[OperationParam.UploadFileSize.Value] = info.Length;
-
-            ServerCallback callback = BrainCloudClient.CreateServerCallback(success, failure, cbObject);
-            ServerCall sc = new ServerCall(ServiceName.File, ServiceOperation.PrepareUserUpload, data, callback);
-            _client.SendRequest(sc);
-
-            return true;
+            return UploadFileFromMemory(cloudFilename, cloudFilename, shareable, replaceIfExists, fileData, success,
+                failure, cbObject);
 #endif
         }
 
-        
         /// <summary>
         /// Prepares a user file upload from memory, allowing the user to bypass 
-        //the need to read or write on disk before uploading. On success the file will begin uploading
+        /// the need to read or write on disk before uploading. On success the file will begin uploading
         /// to the brainCloud server.To be informed of success/failure of the upload
         /// register an IFileUploadCallback with the BrainCloudClient class.
         /// </summary>
@@ -82,7 +76,7 @@ using System;
         /// <param name="cloudFilename">The desired cloud fileName of the file</param>
         /// <param name="shareable">True if the file is shareable</param>
         /// <param name="replaceIfExists">Whether to replace file if it exists</param>
-        /// <param name="fileData">The converted file data from memory in string format. if your memory data is in a byte[] you can use System.Convert.ToBase64String(bytes) to convert into a proper string format</param>
+        /// <param name="fileData">The file memory data in byte[]</param>
         /// <param name="success">The success callback</param>
         /// <param name="failure">The failure callback</param>
         /// <param name="cbObject">The callback object</param>
@@ -91,21 +85,27 @@ using System;
             string cloudFilename,
             bool shareable,
             bool replaceIfExists,
-            string fileData,
+            byte[] fileData,
             SuccessCallback success = null,
             FailureCallback failure = null,
             object cbObject = null)
-        {
+        {   
+            if (fileData.Length == 0)
+            {
+                _client.Log("File data is empty");
+                return false;
+            }
+            string guid = Guid.NewGuid().ToString();
+            _client.FileService.FileStorage.Add(guid, fileData);
+            
             Dictionary<string, object> data = new Dictionary<string, object>();
-            data[OperationParam.UploadLocalPath.Value] = fileData;
+            data[OperationParam.UploadLocalPath.Value] = guid;
             data[OperationParam.UploadCloudFilename.Value] = cloudFilename;
             data[OperationParam.UploadCloudPath.Value] = cloudPath;
             data[OperationParam.UploadShareable.Value] = shareable;
             data[OperationParam.UploadReplaceIfExists.Value] = replaceIfExists;
-
-            byte[] file = System.Convert.FromBase64String(fileData);
-            data[OperationParam.UploadFileSize.Value] = file.Length;
-
+            data[OperationParam.UploadFileSize.Value] = fileData.Length;
+            
             ServerCallback callback = BrainCloudClient.CreateServerCallback(success, failure, cbObject);
             ServerCall sc = new ServerCall(ServiceName.File, ServiceOperation.PrepareUserUpload, data, callback);
             _client.SendRequest(sc);
